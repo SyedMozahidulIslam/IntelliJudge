@@ -188,7 +188,7 @@ function seedDatabase() {
       caseId: c.id,
       caseNumber: c.caseNumber,
       caseTitle: c.title,
-      hearingDate: c.nextHearingDate,
+      hearingDate: idx < 2 ? new Date().toISOString().split("T")[0] : c.nextHearingDate,
       hearingTime: `${9 + (idx % 4)}:30 AM`,
       courtroom: `Room No. ${400 + idx}`,
       judge: c.judge,
@@ -196,7 +196,7 @@ function seedDatabase() {
       checklist: ["Verify primary deed", "Examine secondary witness", "Draft written statement"],
       durationMinutes: 45 + (idx % 4) * 15,
       outcome: idx % 3 === 0 ? "Adjourned - Next date set" : "Hearing concluded",
-      status: idx % 2 === 0 ? "Scheduled" : "Completed",
+      status: idx < 2 ? "Scheduled" : (idx % 2 === 0 ? "Scheduled" : "Completed"),
       notes: "Ensure translated land survey reports are submitted prior to this hearing session."
     });
   });

@@ -567,6 +567,15 @@ export default function App() {
   const disposedCases = (dbState?.cases || []).filter(c => c.status === "Disposed").length;
   const criticalCases = (dbState?.cases || []).filter(c => c.riskLevel === "Critical").length;
 
+  // Real-time Today's Hearing Compliance
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todaysHearings = (dbState?.hearings || []).filter(h => h.hearingDate === todayStr);
+  const verifiedPresentCount = todaysHearings.filter(h => h.status === "Verified Present").length;
+  const pendingCount = todaysHearings.filter(h => h.status === "Scheduled" || h.status === "Pending").length;
+  const complianceRate = todaysHearings.length > 0 
+    ? Math.round((verifiedPresentCount / todaysHearings.length) * 100) 
+    : 100;
+
   // Filter cases based on search and practice type
   const filteredCases = (dbState?.cases || []).filter(c => {
     const matchesSearch = c.title.toLowerCase().includes(caseSearch.toLowerCase()) ||
@@ -863,7 +872,7 @@ export default function App() {
                   </div>
 
                   {/* Core Metrics Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                     <div className="bg-[#0F223D] border border-[#D4AF37]/10 p-5 rounded-xl hover:border-[#D4AF37]/30 transition-all shadow-lg">
                       <div className="flex justify-between items-start">
                         <p className="text-xs font-mono text-slate-400 uppercase">Active Litigations</p>
@@ -895,6 +904,36 @@ export default function App() {
                       </div>
                       <p className="text-3xl font-extrabold text-white mt-2 font-mono">{dbState?.employees.length}</p>
                       <p className="text-xs text-slate-400 mt-2">Individual profile cards mapped</p>
+                    </div>
+
+                    {/* Today's Attendance Compliance Card */}
+                    <div className="bg-[#0F223D] border border-[#D4AF37]/15 p-5 rounded-xl hover:border-[#D4AF37]/40 transition-all shadow-lg relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 h-16 w-16 bg-emerald-500/5 rounded-bl-3xl -z-10 group-hover:bg-emerald-500/10 transition-colors duration-300"></div>
+                      <div className="flex justify-between items-start">
+                        <p className="text-xs font-mono text-slate-400 uppercase">Today's Attendance</p>
+                        <UserCheck className="h-5 w-5 text-emerald-400 animate-pulse" />
+                      </div>
+                      
+                      <div className="mt-2 flex items-baseline gap-2">
+                        <p className="text-3xl font-extrabold text-white font-mono">{verifiedPresentCount}</p>
+                        <p className="text-sm text-slate-400">/ {todaysHearings.length} Verified</p>
+                      </div>
+
+                      {/* Mini visual progress bar */}
+                      <div className="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${complianceRate}%` }}
+                        />
+                      </div>
+
+                      <div className="text-[10px] text-slate-400 mt-2.5 flex justify-between items-center">
+                        <span className="flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 bg-amber-500 rounded-full"></span>
+                          <span className="font-mono text-[9px]">{pendingCount} Pending</span>
+                        </span>
+                        <span className="font-mono font-bold text-emerald-400">{complianceRate}% compliance</span>
+                      </div>
                     </div>
 
                     <div className="bg-[#0F223D] border border-[#D4AF37]/10 p-5 rounded-xl hover:border-[#D4AF37]/30 transition-all shadow-lg">
