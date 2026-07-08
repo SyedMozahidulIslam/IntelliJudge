@@ -96,6 +96,7 @@ import {
   Legend
 } from "recharts";
 import { UserRole, Employee, Case, Hearing, Evidence, Contract, FinancialRecord, Appointment, AuditLog } from "./types";
+import { ArbitrationMediationModule } from "./components/ArbitrationMediationModule";
 
 export default function App() {
   // Authentication & Simulation States
@@ -795,6 +796,20 @@ export default function App() {
               <Compass className="h-4 w-4 text-[#D4AF37]" />
               <span className="flex items-center gap-1.5">
                 Court Attendance <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1 rounded font-mono font-bold">GPS</span>
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("adr")}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all w-full ${
+                activeTab === "adr"
+                  ? "bg-gradient-to-r from-[#D4AF37]/10 to-transparent border-l-4 border-[#D4AF37] text-[#D4AF37] font-semibold"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <Briefcase className="h-4 w-4 text-[#D4AF37]" />
+              <span className="flex items-center gap-1.5">
+                Arbitration & Mediation <span className="text-[9px] bg-[#D4AF37]/10 text-[#D4AF37] px-1 rounded font-mono font-bold border border-[#D4AF37]/20">ADR</span>
               </span>
             </button>
 
@@ -1745,6 +1760,22 @@ export default function App() {
                       </table>
                     </div>
                   </div>
+                </motion.div>
+              )}
+
+              {/* I. Arbitration & Mediation Module */}
+              {activeTab === "adr" && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-6"
+                >
+                  <ArbitrationMediationModule
+                    dbState={dbState}
+                    refreshDbState={fetchState}
+                    selectedRole={selectedRole}
+                  />
                 </motion.div>
               )}
 
