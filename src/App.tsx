@@ -306,7 +306,7 @@ export default function App() {
       if (!pin || pin.length < 4) return;
       // Mark invoice as paid in DB
       try {
-        const matchingTx = dbState?.finance.find(f => f.id === invoiceId);
+        const matchingTx = (dbState?.finance || []).find(f => f.id === invoiceId);
         if (matchingTx) {
           await fetch(`/api/finance`, {
             method: "POST",
@@ -398,28 +398,28 @@ export default function App() {
   };
 
   // Calculations for Admin / Judicial Analytics
-  const totalCases = dbState?.cases.length || 0;
-  const activeCases = dbState?.cases.filter(c => c.status !== "Disposed").length || 0;
-  const disposedCases = dbState?.cases.filter(c => c.status === "Disposed").length || 0;
-  const criticalCases = dbState?.cases.filter(c => c.riskLevel === "Critical").length || 0;
+  const totalCases = (dbState?.cases || []).length;
+  const activeCases = (dbState?.cases || []).filter(c => c.status !== "Disposed").length;
+  const disposedCases = (dbState?.cases || []).filter(c => c.status === "Disposed").length;
+  const criticalCases = (dbState?.cases || []).filter(c => c.riskLevel === "Critical").length;
 
   // Filter cases based on search and practice type
-  const filteredCases = dbState?.cases.filter(c => {
+  const filteredCases = (dbState?.cases || []).filter(c => {
     const matchesSearch = c.title.toLowerCase().includes(caseSearch.toLowerCase()) ||
                           c.caseNumber.toLowerCase().includes(caseSearch.toLowerCase()) ||
                           c.clientName.toLowerCase().includes(caseSearch.toLowerCase());
     const matchesType = caseTypeFilter === "All" || c.caseType === caseTypeFilter;
     return matchesSearch && matchesType;
-  }) || [];
+  });
 
   // Filter Employees (Personnel Directory) with performance rating, paginated (showing all 400 cards cleanly)
-  const filteredEmployees = dbState?.employees.filter(e => {
+  const filteredEmployees = (dbState?.employees || []).filter(e => {
     const matchesSearch = e.name.toLowerCase().includes(personnelSearch.toLowerCase()) ||
                           e.email.toLowerCase().includes(personnelSearch.toLowerCase()) ||
                           e.phone.includes(personnelSearch);
     const matchesRole = personnelRoleFilter === "All" || e.role === personnelRoleFilter;
     return matchesSearch && matchesRole;
-  }) || [];
+  });
 
   const totalPersonnelPages = Math.ceil(filteredEmployees.length / personnelPerPage);
   const paginatedEmployees = filteredEmployees.slice(
@@ -428,25 +428,25 @@ export default function App() {
   );
 
   // Financial statistics
-  const totalRevenue = dbState?.finance
+  const totalRevenue = (dbState?.finance || [])
     .filter(f => f.type === "Payment" || (f.type === "Invoice" && f.status === "Paid"))
     .reduce((acc, f) => acc + f.amount, 0) || 0;
-  const trustFunds = dbState?.finance
+  const trustFunds = (dbState?.finance || [])
     .filter(f => f.isTrustAccount)
     .reduce((acc, f) => acc + f.amount, 0) || 0;
-  const outstandingInvoices = dbState?.finance
+  const outstandingInvoices = (dbState?.finance || [])
     .filter(f => f.type === "Invoice" && f.status === "Unpaid")
     .reduce((acc, f) => acc + f.amount, 0) || 0;
 
   // Pie chart variables
   const caseTypeDistribution = [
-    { name: "Civil", value: dbState?.cases.filter(c => c.caseType === "Civil").length || 3, color: "#1E3A8A" },
-    { name: "Criminal", value: dbState?.cases.filter(c => c.caseType === "Criminal").length || 4, color: "#991B1B" },
-    { name: "Constitutional", value: dbState?.cases.filter(c => c.caseType === "Constitutional").length || 2, color: "#D4AF37" },
-    { name: "Labour", value: dbState?.cases.filter(c => c.caseType === "Labour").length || 2, color: "#065F46" },
-    { name: "Family", value: dbState?.cases.filter(c => c.caseType === "Family").length || 2, color: "#701A75" },
-    { name: "Tax", value: dbState?.cases.filter(c => c.caseType === "Tax").length || 1, color: "#C2410C" },
-    { name: "Corporate", value: dbState?.cases.filter(c => c.caseType === "Corporate").length || 2, color: "#0369A1" }
+    { name: "Civil", value: (dbState?.cases || []).filter(c => c.caseType === "Civil").length || 3, color: "#1E3A8A" },
+    { name: "Criminal", value: (dbState?.cases || []).filter(c => c.caseType === "Criminal").length || 4, color: "#991B1B" },
+    { name: "Constitutional", value: (dbState?.cases || []).filter(c => c.caseType === "Constitutional").length || 2, color: "#D4AF37" },
+    { name: "Labour", value: (dbState?.cases || []).filter(c => c.caseType === "Labour").length || 2, color: "#065F46" },
+    { name: "Family", value: (dbState?.cases || []).filter(c => c.caseType === "Family").length || 2, color: "#701A75" },
+    { name: "Tax", value: (dbState?.cases || []).filter(c => c.caseType === "Tax").length || 1, color: "#C2410C" },
+    { name: "Corporate", value: (dbState?.cases || []).filter(c => c.caseType === "Corporate").length || 2, color: "#0369A1" }
   ];
 
   // Financial timeline charts
@@ -703,7 +703,7 @@ export default function App() {
                         <Calendar className="h-5 w-5 text-emerald-500" />
                       </div>
                       <p className="text-3xl font-extrabold text-white mt-2 font-mono">
-                        {dbState?.hearings.filter(h => h.status === "Scheduled").length}
+                        {(dbState?.hearings || []).filter(h => h.status === "Scheduled").length}
                       </p>
                       <p className="text-xs text-slate-400 mt-2 flex items-center gap-1.5">
                         In Dhaka & Divisional high courts
@@ -804,9 +804,9 @@ export default function App() {
                           <Clock className="h-4 w-4 text-slate-400" />
                         </div>
                         <div className="space-y-3.5 max-h-[300px] overflow-y-auto">
-                          {dbState?.hearings.slice(0, 4).map((hearing) => (
+                          {(dbState?.hearings || []).slice(0, 4).map((hearing) => (
                             <div key={hearing.id} className="p-3 bg-[#051124] border border-white/5 border-l-4 border-l-emerald-500 rounded-lg hover:bg-[#051124]/80 transition-all cursor-pointer" onClick={() => {
-                              const match = dbState.cases.find(c => c.id === hearing.caseId);
+                              const match = (dbState?.cases || []).find(c => c.id === hearing.caseId);
                               if (match) setSelectedCase(match);
                             }}>
                               <div className="flex justify-between items-center">
@@ -1333,7 +1333,7 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#D4AF37]/10 text-xs">
-                          {dbState?.finance.map((tx) => (
+                          {(dbState?.finance || []).map((tx) => (
                             <tr key={tx.id} className="hover:bg-[#051124]/50 transition-colors">
                               <td className="p-4 font-mono text-slate-300">{tx.id}</td>
                               <td className="p-4 font-semibold text-white">{tx.clientName}</td>
@@ -1390,7 +1390,7 @@ export default function App() {
                       <div className="bg-[#0F223D] border border-[#D4AF37]/10 rounded-xl p-5 shadow-lg">
                         <h3 className="text-sm font-bold text-white mb-4">Outstanding Legal Notices & Invoices</h3>
                         <div className="space-y-3">
-                          {dbState?.finance.filter(f => f.status === "Unpaid").map((inv) => (
+                          {(dbState?.finance || []).filter(f => f.status === "Unpaid").map((inv) => (
                             <div key={inv.id} className="p-4 bg-[#051124] border border-red-500/20 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-inner">
                               <div>
                                 <span className="text-[10px] font-mono text-red-400 uppercase font-bold">Unpaid Invoice • {inv.caseNumber}</span>
@@ -1415,7 +1415,7 @@ export default function App() {
                       <div className="bg-[#0F223D] border border-[#D4AF37]/10 rounded-xl p-5 shadow-lg">
                         <h3 className="text-sm font-bold text-white mb-4">Your Registered Litigations</h3>
                         <div className="space-y-4">
-                          {dbState?.cases.slice(0, 2).map((c) => (
+                          {(dbState?.cases || []).slice(0, 2).map((c) => (
                             <div key={c.id} className="p-4 bg-[#051124] border border-[#D4AF37]/10 rounded-lg hover:border-[#D4AF37]/40 transition-all cursor-pointer shadow-inner" onClick={() => setSelectedCase(c)}>
                               <div className="flex justify-between items-center">
                                 <span className="text-[10px] font-mono text-[#D4AF37]">{c.caseNumber}</span>
@@ -1533,7 +1533,7 @@ export default function App() {
                   </div>
 
                   <div className="space-y-3">
-                    {dbState?.auditLogs.map((log) => (
+                    {(dbState?.auditLogs || []).map((log) => (
                       <div key={log.id} className="p-4.5 bg-[#0F223D] border border-[#D4AF37]/10 rounded-xl flex items-start gap-4 shadow-lg">
                         <div className="p-2 bg-[#D4AF37]/10 rounded-lg text-[#D4AF37] border border-[#D4AF37]/15">
                           <Shield className="h-5 w-5" />
@@ -1660,7 +1660,7 @@ export default function App() {
 
                   {/* List evidence */}
                   <div className="space-y-2">
-                    {dbState?.evidence.filter(ev => ev.caseId === selectedCase.id).map((ev) => (
+                    {(dbState?.evidence || []).filter(ev => ev.caseId === selectedCase?.id).map((ev) => (
                       <div key={ev.id} className="p-3 bg-[#051124] border border-[#D4AF37]/10 rounded-lg flex justify-between items-center shadow-inner">
                         <div className="flex items-start gap-2.5">
                           <FileText className="h-5 w-5 text-[#D4AF37] shrink-0 mt-0.5" />
