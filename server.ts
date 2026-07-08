@@ -46,6 +46,7 @@ interface DataStoreSchema {
   finance: any[];
   auditLogs: any[];
   criminals: any[];
+  courtAttendance: any[];
 }
 
 // High Court jurisdictions of Bangladesh
@@ -309,7 +310,8 @@ function seedDatabase() {
     appointments,
     finance,
     auditLogs,
-    criminals
+    criminals,
+    courtAttendance: []
   };
 
   fs.writeFileSync(STORE_PATH, JSON.stringify(initialData, null, 2), "utf8");
@@ -317,6 +319,9 @@ function seedDatabase() {
 }
 
 let dbState: DataStoreSchema = seedDatabase();
+if (!dbState.courtAttendance) {
+  dbState.courtAttendance = [];
+}
 
 // Save helper
 function saveState() {
@@ -435,6 +440,37 @@ app.post("/api/appointments", (req, res) => {
     ...req.body
   };
   dbState.appointments.unshift(newAppt);
+
+  // Synchronize scheduled litigation steps/hearings with dbState.hearings
+  if (req.body.caseId) {
+    const purpose = req.body.purpose || "";
+    const courtroomMatch = purpose.match(/at\s+(Room\s+No\.\s+\d+)/i) || purpose.match(/at\s+([^.]+)/i);
+    const courtroom = courtroomMatch ? courtroomMatch[1] : "Room No. 402";
+
+    const judgeMatch = purpose.match(/with\s+Judge\s+([^.]+)/i);
+    const judge = judgeMatch ? judgeMatch[1] : "Justice Md. Ashraful Islam";
+
+    const notesMatch = purpose.match(/Notes:\s*(.*)/i);
+    const notes = notesMatch ? notesMatch[1] : purpose;
+
+    dbState.hearings.unshift({
+      id: `hearing-${Date.now()}`,
+      caseId: req.body.caseId,
+      caseNumber: req.body.caseNumber || "",
+      caseTitle: dbState.cases.find(c => c.id === req.body.caseId)?.title || "Court Litigation Session",
+      hearingDate: req.body.dateTime ? req.body.dateTime.split("T")[0] : new Date().toISOString().split("T")[0],
+      hearingTime: req.body.dateTime ? new Date(req.body.dateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "10:30 AM",
+      courtroom,
+      judge,
+      assignedLawyer: req.body.lawyerName || "Salim Rahaman Dipu",
+      checklist: ["Verify primary deed", "Examine witness"],
+      durationMinutes: 45,
+      outcome: "Hearing scheduled",
+      status: "Scheduled",
+      notes
+    });
+  }
+
   saveState();
   res.json({ success: true, item: newAppt });
 });
@@ -449,6 +485,69 @@ app.post("/api/contracts", (req, res) => {
   dbState.contracts.unshift(newContract);
   saveState();
   res.json({ success: true, item: newContract });
+});
+
+// Court Attendance Endpoint
+app.post("/api/court-attendance", (req, res) => {
+  const newAttendance = {
+    id: `attn-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    ...req.body
+  };
+  dbState.courtAttendance.unshift(newAttendance);
+
+  // Automatically update the 'Court Hearing' status to 'Verified Present' in the hearings store
+  if (req.body.caseId && (req.body.status === "Verified" || req.body.status === "Simulated")) {
+    let updatedHearing = false;
+    dbState.hearings = dbState.hearings.map((h) => {
+      if (h.caseId === req.body.caseId && h.status === "Scheduled") {
+        updatedHearing = true;
+        return {
+          ...h,
+          status: "Verified Present",
+          outcome: `Presence of ${req.body.name} (${req.body.role}) verified via GPS at ${req.body.courtName}.`,
+          notes: `${h.notes || ""}\n[GPS Verification ${new Date().toLocaleString()}]: Status: ${req.body.status}. coordinates: [${req.body.latitude || 0}, ${req.body.longitude || 0}]`
+        };
+      }
+      return h;
+    });
+
+    // If no scheduled hearing exists, create an dynamic active stage hearing as "Verified Present"
+    if (!updatedHearing) {
+      const associatedCase = dbState.cases.find(c => c.id === req.body.caseId);
+      dbState.hearings.unshift({
+        id: `hearing-${Date.now()}`,
+        caseId: req.body.caseId,
+        caseNumber: associatedCase ? associatedCase.caseNumber : (req.body.caseNumber || "Ad-hoc"),
+        caseTitle: associatedCase ? associatedCase.title : "Court Litigation Session",
+        hearingDate: new Date().toISOString().split("T")[0],
+        hearingTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        courtroom: "Room No. 402",
+        judge: associatedCase ? associatedCase.judge : "Justice Md. Ashraful Islam",
+        assignedLawyer: req.body.name || "Salim Rahaman Dipu",
+        checklist: ["GPS presence validated"],
+        durationMinutes: 30,
+        outcome: `Presence of ${req.body.name} (${req.body.role}) verified via GPS.`,
+        status: "Verified Present",
+        notes: `Attendance verified at ${req.body.courtName} (Lat: ${req.body.latitude || 0}, Lng: ${req.body.longitude || 0}).`
+      });
+    }
+  }
+
+  // Add audit log
+  dbState.auditLogs.unshift({
+    id: `log-${Date.now()}`,
+    timestamp: new Date().toLocaleString(),
+    user: req.body.name || "System",
+    role: req.body.role || "Lawyer",
+    action: "Court Presence Logged",
+    module: "Court Attendance Ledger",
+    ipAddress: "127.0.0.1",
+    details: `${req.body.name} (${req.body.role}) logged court attendance at ${req.body.courtName || "Court"} via GPS [${req.body.latitude || 0}, ${req.body.longitude || 0}]. Status: ${req.body.status || "Verified"}.`
+  });
+
+  saveState();
+  res.json({ success: true, item: newAttendance });
 });
 
 // ---------------- INTELLIGENT AI FEATURES (GEMINI) ----------------

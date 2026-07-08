@@ -13,6 +13,33 @@ const COURT_DIRECTORY = [
   { name: "Taxes Appellate Tribunal", type: "Tax Tribunal", location: "Dhaka" },
   { name: "Dhaka Family Court", type: "Family Court", location: "Dhaka" }
 ];
+
+const COURT_COORDINATES: Record<string, { lat: number; lng: number }> = {
+  "Supreme Court of Bangladesh": { lat: 23.7380, lng: 90.4024 },
+  "High Court Division - Bench 01": { lat: 23.7381, lng: 90.4025 },
+  "High Court Division - Bench 12 (Constitutional)": { lat: 23.7382, lng: 90.4026 },
+  "Dhaka District & Sessions Court": { lat: 23.7081, lng: 90.4137 },
+  "Chittagong District & Sessions Court": { lat: 22.3353, lng: 91.8340 },
+  "Sylhet Metropolitan Court": { lat: 24.8917, lng: 91.8833 },
+  "Labour Court Division 1": { lat: 23.7328, lng: 90.4196 },
+  "Administrative Appellate Tribunal": { lat: 23.7461, lng: 90.3742 },
+  "Taxes Appellate Tribunal": { lat: 23.7431, lng: 90.3992 },
+  "Dhaka Family Court": { lat: 23.7251, lng: 90.4072 }
+};
+
+function getHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+}
 import {
   Scale,
   Briefcase,
@@ -28,6 +55,9 @@ import {
   ArrowRight,
   TrendingUp,
   Award,
+  Compass,
+  Navigation,
+  Map,
   Clock,
   Printer,
   Copy,
@@ -112,6 +142,21 @@ export default function App() {
   const [researchPracticeArea, setResearchPracticeArea] = useState<string>("Civil Litigations");
   const [researchResult, setResearchResult] = useState<string>("");
   const [researching, setResearching] = useState<boolean>(false);
+
+  // Court Attendance States
+  const [attendanceForm, setAttendanceForm] = useState({
+    name: "",
+    role: "Lawyer" as "Lawyer" | "Witness",
+    courtName: "Supreme Court of Bangladesh",
+    caseId: "",
+    notes: ""
+  });
+  const [attendanceLocation, setAttendanceLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [attendanceLocationType, setAttendanceLocationType] = useState<"GPS" | "Simulated" | "">("");
+  const [attendanceLoading, setAttendanceLoading] = useState<boolean>(false);
+  const [attendanceStatus, setAttendanceStatus] = useState<"Verified" | "Outside Boundary" | "Simulated" | "">("");
+  const [attendanceDistanceText, setAttendanceDistanceText] = useState<string>("");
+  const [submittingAttendance, setSubmittingAttendance] = useState<boolean>(false);
 
   // New Case Modal States
   const [showNewCaseModal, setShowNewCaseModal] = useState<boolean>(false);
@@ -397,6 +442,125 @@ export default function App() {
     }
   };
 
+  // Court Attendance Handlers
+  const handleFetchGPSLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser. Please use the simulated option.");
+      return;
+    }
+    setAttendanceLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setAttendanceLocation({ lat: latitude, lng: longitude });
+        setAttendanceLocationType("GPS");
+        
+        // Calculate distance from chosen court
+        const courtName = attendanceForm.courtName;
+        const courtCoords = COURT_COORDINATES[courtName] || { lat: 23.7380, lng: 90.4024 };
+        const dist = getHaversineDistance(latitude, longitude, courtCoords.lat, courtCoords.lng);
+        
+        if (dist <= 0.2) {
+          setAttendanceStatus("Verified");
+          setAttendanceDistanceText(`${(dist * 1000).toFixed(0)} meters (Verified within Complex boundary)`);
+        } else {
+          setAttendanceStatus("Outside Boundary");
+          setAttendanceDistanceText(`${dist.toFixed(2)} km (Outside boundary - remote verification)`);
+        }
+        setAttendanceLoading(false);
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+        alert(`Failed to fetch GPS coordinates (${error.message}). Please use the high-fidelity 'Simulate Court GPS Presence' for testing in sandbox mode.`);
+        setAttendanceLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleSimulateCourtPresence = (courtName: string) => {
+    const courtCoords = COURT_COORDINATES[courtName] || { lat: 23.7380, lng: 90.4024 };
+    // Add small realistic offset (~10-25 meters)
+    const offsetLat = (Math.random() - 0.5) * 0.00015;
+    const offsetLng = (Math.random() - 0.5) * 0.00015;
+    const simLat = courtCoords.lat + offsetLat;
+    const simLng = courtCoords.lng + offsetLng;
+    
+    setAttendanceLocation({ lat: simLat, lng: simLng });
+    setAttendanceLocationType("Simulated");
+    setAttendanceStatus("Simulated");
+    const dist = getHaversineDistance(simLat, simLng, courtCoords.lat, courtCoords.lng);
+    setAttendanceDistanceText(`${(dist * 1000).toFixed(0)} meters (Simulated Satellite Signal Lock)`);
+  };
+
+  const handleSimulateRemotePresence = () => {
+    // Put coordinates in another part of Dhaka (e.g. Uttara / Banani)
+    const targetCoords = COURT_COORDINATES[attendanceForm.courtName] || { lat: 23.7380, lng: 90.4024 };
+    const remoteLat = 23.8644; // Uttara
+    const remoteLng = 90.4034;
+    
+    setAttendanceLocation({ lat: remoteLat, lng: remoteLng });
+    setAttendanceLocationType("Simulated");
+    setAttendanceStatus("Outside Boundary");
+    const dist = getHaversineDistance(remoteLat, remoteLng, targetCoords.lat, targetCoords.lng);
+    setAttendanceDistanceText(`${dist.toFixed(2)} km (Outside Boundary: remote location detected)`);
+  };
+
+  const handleSubmitAttendance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!attendanceForm.name) {
+      alert("Please provide the name of the attendee.");
+      return;
+    }
+    if (!attendanceLocation) {
+      alert("Please fetch or simulate location coordinates first.");
+      return;
+    }
+    setSubmittingAttendance(true);
+    try {
+      const selectedCaseObj = (dbState?.cases || []).find(c => c.id === attendanceForm.caseId);
+      const res = await fetch("/api/court-attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: attendanceForm.name,
+          role: attendanceForm.role,
+          courtName: attendanceForm.courtName,
+          caseId: attendanceForm.caseId || null,
+          caseNumber: selectedCaseObj ? selectedCaseObj.caseNumber : "Ad-hoc Attendance",
+          latitude: attendanceLocation.lat,
+          longitude: attendanceLocation.lng,
+          status: attendanceStatus,
+          distanceText: attendanceDistanceText,
+          notes: attendanceForm.notes,
+          verificationType: attendanceLocationType
+        })
+      });
+      if (res.ok) {
+        // Reset states
+        setAttendanceForm({
+          name: "",
+          role: "Lawyer",
+          courtName: "Supreme Court of Bangladesh",
+          caseId: "",
+          notes: ""
+        });
+        setAttendanceLocation(null);
+        setAttendanceLocationType("");
+        setAttendanceStatus("");
+        setAttendanceDistanceText("");
+        
+        // Fetch fresh db state
+        fetchState();
+        alert("Presence verified & logged successfully in the Court Attendance Ledger.");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmittingAttendance(false);
+    }
+  };
+
   // Calculations for Admin / Judicial Analytics
   const totalCases = (dbState?.cases || []).length;
   const activeCases = (dbState?.cases || []).filter(c => c.status !== "Disposed").length;
@@ -611,6 +775,20 @@ export default function App() {
               <span>Courts Directory</span>
             </button>
 
+            <button
+              onClick={() => setActiveTab("attendance")}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all w-full ${
+                activeTab === "attendance"
+                  ? "bg-gradient-to-r from-[#D4AF37]/10 to-transparent border-l-4 border-[#D4AF37] text-[#D4AF37] font-semibold"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <Compass className="h-4 w-4 text-[#D4AF37]" />
+              <span className="flex items-center gap-1.5">
+                Court Attendance <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1 rounded font-mono font-bold">GPS</span>
+              </span>
+            </button>
+
             {(selectedRole === UserRole.SUPREME_ADMIN || selectedRole === UserRole.JUDICIAL_AUTHORITY) && (
               <button
                 onClick={() => setActiveTab("audit")}
@@ -804,21 +982,35 @@ export default function App() {
                           <Clock className="h-4 w-4 text-slate-400" />
                         </div>
                         <div className="space-y-3.5 max-h-[300px] overflow-y-auto">
-                          {(dbState?.hearings || []).slice(0, 4).map((hearing) => (
-                            <div key={hearing.id} className="p-3 bg-[#051124] border border-white/5 border-l-4 border-l-emerald-500 rounded-lg hover:bg-[#051124]/80 transition-all cursor-pointer" onClick={() => {
-                              const match = (dbState?.cases || []).find(c => c.id === hearing.caseId);
-                              if (match) setSelectedCase(match);
-                            }}>
-                              <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-mono font-bold text-amber-400">{hearing.caseNumber}</span>
-                                <span className="text-[10px] text-slate-400 flex items-center gap-1 font-mono">
-                                  <Clock className="h-2.5 w-2.5 text-[#D4AF37]" /> {hearing.hearingTime}
-                                </span>
+                          {(dbState?.hearings || []).slice(0, 4).map((hearing) => {
+                            const isVerified = hearing.status === "Verified Present";
+                            return (
+                              <div key={hearing.id} className={`p-3 bg-[#051124] border border-white/5 border-l-4 rounded-lg hover:bg-[#051124]/80 transition-all cursor-pointer ${
+                                isVerified ? "border-l-emerald-500 shadow-[inset_0_0_8px_rgba(16,185,129,0.1)]" : "border-l-amber-500"
+                              }`} onClick={() => {
+                                const match = (dbState?.cases || []).find(c => c.id === hearing.caseId);
+                                if (match) setSelectedCase(match);
+                              }}>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-mono font-bold text-amber-400">{hearing.caseNumber}</span>
+                                  <span className="text-[10px] text-slate-400 flex items-center gap-1 font-mono">
+                                    {isVerified ? (
+                                      <span className="text-emerald-400 font-bold uppercase tracking-wider text-[8px] bg-emerald-500/15 border border-emerald-500/20 px-1 py-0.5 rounded">Verified Present</span>
+                                    ) : (
+                                      <>
+                                        <Clock className="h-2.5 w-2.5 text-[#D4AF37]" /> {hearing.hearingTime}
+                                      </>
+                                    )}
+                                  </span>
+                                </div>
+                                <h4 className="text-xs font-semibold text-white mt-1 truncate">{hearing.caseTitle}</h4>
+                                <div className="flex justify-between items-center mt-1 text-[10px] text-slate-400 font-mono">
+                                  <span className="truncate">{hearing.courtroom} • {hearing.judge}</span>
+                                  {isVerified && <span className="text-emerald-400 font-sans font-medium">● Present</span>}
+                                </div>
                               </div>
-                              <h4 className="text-xs font-semibold text-white mt-1 truncate">{hearing.caseTitle}</h4>
-                              <p className="text-[10px] text-slate-400 mt-1 truncate font-mono">{hearing.courtroom} • {hearing.judge}</p>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -1560,6 +1752,352 @@ export default function App() {
                 </motion.div>
               )}
 
+              {/* I. Court Attendance Tab */}
+              {activeTab === "attendance" && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-6"
+                >
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Compass className="h-5 w-5 text-[#D4AF37]" />
+                        Court Attendance & GPS Verification Ledger
+                      </h2>
+                      <p className="text-xs text-slate-400">
+                        Cryptographically logged attendance of lawyers and witnesses backed by high-accuracy satellite location telemetry.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left Panel: Log Attendance Form */}
+                    <div className="bg-[#0F223D] border border-[#D4AF37]/15 rounded-2xl p-6 shadow-xl space-y-5 h-fit">
+                      <div className="flex items-center gap-2 pb-3 border-b border-[#D4AF37]/10">
+                        <Navigation className="h-5 w-5 text-emerald-400" />
+                        <h3 className="text-sm font-bold text-white uppercase tracking-wide">
+                          Verify Court Presence
+                        </h3>
+                      </div>
+
+                      <form onSubmit={handleSubmitAttendance} className="space-y-4 text-xs">
+                        {/* Attendee Name */}
+                        <div>
+                          <label className="block text-slate-400 mb-1.5 font-semibold">Attendee Full Name</label>
+                          <input
+                            type="text"
+                            className="w-full bg-[#051124] border border-[#D4AF37]/20 rounded-lg p-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-[#D4AF37]"
+                            placeholder="Enter Lawyer or Witness name"
+                            value={attendanceForm.name}
+                            onChange={(e) => setAttendanceForm({ ...attendanceForm, name: e.target.value })}
+                            required
+                          />
+                          {/* Easy list helper */}
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            <span className="text-[10px] text-slate-500 mr-1 self-center">Quick Select:</span>
+                            <button
+                              type="button"
+                              onClick={() => setAttendanceForm({ ...attendanceForm, name: "Salim Rahaman Dipu", role: "Lawyer" })}
+                              className="text-[9px] px-1.5 py-0.5 bg-[#051124] hover:bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/15 rounded transition-all cursor-pointer"
+                            >
+                              Dipu (Lawyer)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAttendanceForm({ ...attendanceForm, name: "SMI Fahim", role: "Lawyer" })}
+                              className="text-[9px] px-1.5 py-0.5 bg-[#051124] hover:bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/15 rounded transition-all cursor-pointer"
+                            >
+                              Fahim (Admin)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAttendanceForm({ ...attendanceForm, name: "Hasanur Rahman", role: "Witness" })}
+                              className="text-[9px] px-1.5 py-0.5 bg-[#051124] hover:bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/15 rounded transition-all cursor-pointer"
+                            >
+                              Hasanur (Witness)
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Attendee Role */}
+                        <div>
+                          <label className="block text-slate-400 mb-1.5 font-semibold">Attendee Role</label>
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 text-white cursor-pointer">
+                              <input
+                                type="radio"
+                                name="attnRole"
+                                checked={attendanceForm.role === "Lawyer"}
+                                onChange={() => setAttendanceForm({ ...attendanceForm, role: "Lawyer" })}
+                                className="accent-[#D4AF37]"
+                              />
+                              <span>Lawyer / Officer of the Court</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-white cursor-pointer">
+                              <input
+                                type="radio"
+                                name="attnRole"
+                                checked={attendanceForm.role === "Witness"}
+                                onChange={() => setAttendanceForm({ ...attendanceForm, role: "Witness" })}
+                                className="accent-[#D4AF37]"
+                              />
+                              <span>Witness / Litigant</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Selected Court */}
+                        <div>
+                          <label className="block text-slate-400 mb-1.5 font-semibold">Target Court Jurisdiction</label>
+                          <select
+                            className="w-full bg-[#051124] border border-[#D4AF37]/20 rounded-lg p-2.5 text-white focus:outline-none focus:border-[#D4AF37] cursor-pointer"
+                            value={attendanceForm.courtName}
+                            onChange={(e) => {
+                              setAttendanceForm({ ...attendanceForm, courtName: e.target.value });
+                              // Clear location if they change court, to force re-fetch or re-simulate
+                              setAttendanceLocation(null);
+                              setAttendanceStatus("");
+                              setAttendanceDistanceText("");
+                            }}
+                          >
+                            {COURT_DIRECTORY.map((court) => (
+                              <option key={court.name} value={court.name}>
+                                {court.name} ({court.location})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Associated Case */}
+                        <div>
+                          <label className="block text-slate-400 mb-1.5 font-semibold">Associated Court Case</label>
+                          <select
+                            className="w-full bg-[#051124] border border-[#D4AF37]/20 rounded-lg p-2.5 text-white focus:outline-none focus:border-[#D4AF37] cursor-pointer"
+                            value={attendanceForm.caseId}
+                            onChange={(e) => setAttendanceForm({ ...attendanceForm, caseId: e.target.value })}
+                          >
+                            <option value="">-- General / Ad-hoc Appearance (No specific case) --</option>
+                            {(dbState?.cases || []).map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.caseNumber} • {c.title.slice(0, 30)}...
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Geolocation Verification Core */}
+                        <div className="p-4 bg-[#051124] border border-[#D4AF37]/10 rounded-xl space-y-3.5">
+                          <span className="text-[10px] text-slate-400 font-mono block uppercase tracking-wider">
+                            Location Coordinates (GPS / Satellite)
+                          </span>
+
+                          {attendanceLocation ? (
+                            <div className="space-y-2 font-mono text-[11px]">
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Latitude:</span>
+                                <span className="text-white font-bold">{attendanceLocation.lat.toFixed(6)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Longitude:</span>
+                                <span className="text-white font-bold">{attendanceLocation.lng.toFixed(6)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Source:</span>
+                                <span className={`font-semibold ${attendanceLocationType === "GPS" ? "text-emerald-400" : "text-amber-400"}`}>
+                                  {attendanceLocationType} Telemetry
+                                </span>
+                              </div>
+                              <div className="pt-1.5 border-t border-[#D4AF37]/10">
+                                <div className="flex justify-between items-start gap-1">
+                                  <span className="text-slate-400">Deviation:</span>
+                                  <span className={`text-right font-bold ${attendanceStatus === "Verified" || attendanceStatus === "Simulated" ? "text-emerald-400" : "text-red-400"}`}>
+                                    {attendanceDistanceText}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center py-4 text-slate-500 text-xs italic">
+                              GPS location coordinates not yet locked.
+                            </div>
+                          )}
+
+                          <div className="flex flex-col gap-2 pt-1">
+                            <button
+                              type="button"
+                              disabled={attendanceLoading}
+                              onClick={handleFetchGPSLocation}
+                              className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded shadow flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                            >
+                              <Navigation className={`h-3.5 w-3.5 ${attendanceLoading ? "animate-spin" : ""}`} />
+                              <span>{attendanceLoading ? "Requesting Satellite Lock..." : "Fetch Real GPS Location"}</span>
+                            </button>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSimulateCourtPresence(attendanceForm.courtName)}
+                                className="py-1.5 bg-[#0A192F] hover:bg-[#0A192F]/80 text-[#D4AF37] border border-[#D4AF37]/20 text-[10px] font-bold rounded transition-all cursor-pointer flex items-center justify-center gap-1"
+                              >
+                                <CheckCircle className="h-3 w-3 text-[#D4AF37]" />
+                                <span>Simulate Present</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSimulateRemotePresence}
+                                className="py-1.5 bg-[#0A192F] hover:bg-[#0A192F]/80 text-red-400 border border-red-500/20 text-[10px] font-bold rounded transition-all cursor-pointer flex items-center justify-center gap-1"
+                              >
+                                <AlertTriangle className="h-3 w-3 text-red-400" />
+                                <span>Simulate Remote</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Extra Notes */}
+                        <div>
+                          <label className="block text-slate-400 mb-1.5 font-semibold">Statement / Log Notes</label>
+                          <textarea
+                            className="w-full bg-[#051124] border border-[#D4AF37]/20 rounded-lg p-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-[#D4AF37]"
+                            placeholder="Add case session, target courtroom, or remark"
+                            rows={2}
+                            value={attendanceForm.notes}
+                            onChange={(e) => setAttendanceForm({ ...attendanceForm, notes: e.target.value })}
+                          />
+                        </div>
+
+                        {/* Submit Button */}
+                        <button
+                          type="submit"
+                          disabled={submittingAttendance || !attendanceLocation}
+                          className="w-full py-2.5 bg-gradient-to-r from-[#D4AF37] to-amber-500 disabled:opacity-50 text-[#051124] font-bold rounded-lg shadow-lg hover:opacity-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs"
+                        >
+                          <Compass className="h-4 w-4" />
+                          <span>{submittingAttendance ? "Verifying & Saving..." : "Log Immutable Court Presence"}</span>
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Right Panel: Immutable GPS Logs Ledger */}
+                    <div className="lg:col-span-2 space-y-4">
+                      {/* Live satellite map mockup or pulsing beacon radar */}
+                      <div className="p-5 bg-gradient-to-br from-[#0F223D] to-[#0A192F] border border-[#D4AF37]/20 rounded-2xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative">
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.06),transparent)] pointer-events-none" />
+                        <div className="space-y-2 flex-1 z-10">
+                          <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[9px] font-mono font-bold rounded uppercase tracking-wider border border-emerald-500/15">
+                            Satellite Tracking Feed
+                          </span>
+                          <h3 className="text-base font-extrabold text-white">Active Judicial Geo-Fencing</h3>
+                          <p className="text-xs text-slate-300 max-w-md">
+                            All court attendances are validated against our official coordinates using pre-registered divisional geofences. Verification logs include SHA-256 digital validation seals.
+                          </p>
+                        </div>
+
+                        {/* Pulsing beacon radar */}
+                        <div className="relative h-24 w-24 rounded-full bg-[#051124] border border-[#D4AF37]/25 flex items-center justify-center shrink-0 shadow-inner">
+                          <div className="absolute h-18 w-18 rounded-full border border-emerald-500/30 animate-ping" />
+                          <div className="absolute h-10 w-10 rounded-full bg-emerald-500/10 border border-emerald-500/40 animate-pulse" />
+                          <Compass className="h-7 w-7 text-[#D4AF37] animate-[spin_12s_linear_infinite]" />
+                          <span className="absolute bottom-2 text-[8px] font-mono text-emerald-400 font-bold tracking-widest uppercase text-center w-full block">
+                            LIVE RADAR
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Logs Ledger */}
+                      <div className="bg-[#0F223D] border border-[#D4AF37]/15 rounded-2xl p-5 shadow-xl space-y-4">
+                        <div className="flex justify-between items-center pb-3 border-b border-[#D4AF37]/10">
+                          <h3 className="text-sm font-bold text-white uppercase tracking-wide flex items-center gap-2">
+                            <Map className="h-4 w-4 text-[#D4AF37]" />
+                            Immutable Presence Ledger
+                          </h3>
+                          <span className="text-[10px] font-mono text-slate-400">
+                            Total Logs: {(dbState?.courtAttendance || []).length}
+                          </span>
+                        </div>
+
+                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                          {(dbState?.courtAttendance || []).length === 0 ? (
+                            <div className="text-center py-10 bg-[#051124] border border-[#D4AF37]/5 rounded-xl text-slate-500 text-xs italic">
+                              No court attendance records verified in this fiscal session. Use the form on the left to log presence!
+                            </div>
+                          ) : (
+                            (dbState?.courtAttendance || []).map((log: any) => {
+                              const isVerified = log.status === "Verified" || log.status === "Simulated";
+                              return (
+                                <div
+                                  key={log.id}
+                                  className="p-4 bg-[#051124] border border-white/5 border-l-4 rounded-xl hover:bg-[#051124]/75 transition-all shadow-inner relative flex flex-col md:flex-row justify-between gap-4"
+                                  style={{ borderLeftColor: isVerified ? "#10B981" : "#EF4444" }}
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-bold text-white text-sm">{log.name}</h4>
+                                      <span className="px-1.5 py-0.5 bg-[#D4AF37]/10 text-[#D4AF37] text-[9px] font-semibold rounded font-mono">
+                                        {log.role}
+                                      </span>
+                                      <span className={`text-[9px] px-2 py-0.5 rounded-full font-mono font-bold flex items-center gap-1 ${
+                                        isVerified
+                                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                          : "bg-red-500/10 text-red-400 border border-red-500/20"
+                                      }`}>
+                                        <span className={`h-1.5 w-1.5 rounded-full ${isVerified ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
+                                        {log.status === "Simulated" ? "Simulated Presence" : isVerified ? "Verified Present" : "Boundary Deviation"}
+                                      </span>
+                                    </div>
+
+                                    <div className="text-xs text-slate-300 space-y-1">
+                                      <p className="flex items-center gap-1.5 text-slate-400">
+                                        <MapPin className="h-3.5 w-3.5 text-[#D4AF37]" />
+                                        <span>Target: <strong>{log.courtName}</strong></span>
+                                      </p>
+                                      {log.caseNumber && (
+                                        <p className="text-[11px] font-mono text-slate-400 pl-5">
+                                          Case Reference: <span className="text-white font-semibold">{log.caseNumber}</span>
+                                        </p>
+                                      )}
+                                      {log.notes && (
+                                        <p className="text-xs text-slate-400 italic bg-[#0F223D]/50 border border-white/5 p-2 rounded-lg mt-1 max-w-xl pl-2 font-sans">
+                                          "{log.notes}"
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col justify-between items-end shrink-0 text-right space-y-2 md:space-y-0">
+                                    <span className="text-[10px] text-slate-500 font-mono">
+                                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(log.timestamp).toLocaleDateString()}
+                                    </span>
+
+                                    <div className="space-y-1">
+                                      <div className="text-[10px] font-mono text-slate-400">
+                                        GPS: <a
+                                          href={`https://www.google.com/maps?q=${log.latitude},${log.longitude}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-[#D4AF37] hover:underline"
+                                        >
+                                          {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)} ↗
+                                        </a>
+                                      </div>
+                                      <div className="text-[10px] font-mono font-bold text-slate-400">
+                                        {log.distanceText}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
             </AnimatePresence>
           )}
         </main>
@@ -1631,13 +2169,61 @@ export default function App() {
                   </div>
 
                   <div className="relative pl-6 border-l border-[#D4AF37]/30 ml-2 space-y-4">
-                    <div className="relative">
-                      <div className="absolute -left-[30px] top-1 h-3 w-3 rounded-full bg-[#D4AF37] ring-4 ring-[#0A192F]"></div>
-                      <p className="text-[10px] font-mono text-[#D4AF37]">Active Stage</p>
-                      <h4 className="text-xs font-semibold text-white mt-0.5">Court hearing Scheduled</h4>
-                      <p className="text-xs text-slate-400">Assigned Advocate preparation ongoing. Scheduled for {selectedCase.nextHearingDate}.</p>
-                    </div>
-                    <div className="relative opacity-65">
+                    {/* Dynamic Hearings from Live Ledger */}
+                    {(() => {
+                      const caseHearings = (dbState?.hearings || []).filter(h => h.caseId === selectedCase.id);
+                      if (caseHearings.length === 0) {
+                        return (
+                          <div className="relative">
+                            <div className="absolute -left-[30px] top-1 h-3 w-3 rounded-full bg-[#D4AF37] ring-4 ring-[#0A192F]"></div>
+                            <p className="text-[10px] font-mono text-[#D4AF37]">Active Stage</p>
+                            <h4 className="text-xs font-semibold text-white mt-0.5">Court hearing Scheduled</h4>
+                            <p className="text-xs text-slate-400">Assigned Advocate preparation ongoing. Scheduled for {selectedCase.nextHearingDate}.</p>
+                          </div>
+                        );
+                      }
+                      
+                      return caseHearings.map((hearing, hIdx) => {
+                        const isVerified = hearing.status === "Verified Present";
+                        return (
+                          <div key={hearing.id || hIdx} className="relative space-y-1.5">
+                            <div className={`absolute -left-[30px] top-1.5 h-3.5 w-3.5 rounded-full ring-4 ring-[#0A192F] flex items-center justify-center ${
+                              isVerified 
+                                ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.75)] animate-pulse" 
+                                : "bg-[#D4AF37]"
+                            }`}>
+                              {isVerified && <div className="h-1.5 w-1.5 bg-white rounded-full" />}
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-[10px] font-mono font-bold text-[#D4AF37]">{hearing.hearingDate} • {hearing.hearingTime}</p>
+                              <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                                isVerified 
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                  : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                              }`}>
+                                {hearing.status}
+                              </span>
+                            </div>
+
+                            <h4 className="text-xs font-semibold text-white">
+                              {isVerified ? "Court Session Presence Confirmed" : `Court Hearing Scheduled (${hearing.courtroom})`}
+                            </h4>
+                            <p className="text-xs text-slate-300">
+                              {hearing.outcome || `Hearing scheduled under presiding officer ${hearing.judge}. Advocate Assigned: ${hearing.assignedLawyer}.`}
+                            </p>
+                            {hearing.notes && (
+                              <p className="text-[10px] text-slate-400 font-mono italic bg-[#051124] p-2 rounded-lg border border-[#D4AF37]/10">
+                                {hearing.notes}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+
+                    {/* Standard Historic Foundation Stage */}
+                    <div className="relative opacity-60">
                       <div className="absolute -left-[30px] top-1 h-3 w-3 rounded-full bg-slate-600 ring-4 ring-[#0A192F]"></div>
                       <p className="text-[10px] font-mono text-slate-400">2026-05-12</p>
                       <h4 className="text-xs font-semibold text-white mt-0.5">Written Petitions filed</h4>

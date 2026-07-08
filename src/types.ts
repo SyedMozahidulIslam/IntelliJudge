@@ -143,3 +143,19 @@ export interface NoticeTemplate {
   type: string;
   content: string;
 }
+
+export interface CourtAttendance {
+  id: string;
+  name: string;
+  role: "Lawyer" | "Witness";
+  caseId?: string;
+  caseNumber?: string;
+  courtName: string;
+  latitude: number;
+  longitude: number;
+  timestamp: string;
+  status: "Verified" | "Outside Boundary" | "Simulated";
+  distanceText?: string;
+  notes?: string;
+}
+
