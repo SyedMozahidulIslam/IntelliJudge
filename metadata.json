@@ -1,0 +1,6 @@
+{
+  "name": "IntelliJudge",
+  "description": "Intelligent Legal Practice Management & Judicial Operations Platform styled for the Bangladeshi context.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
